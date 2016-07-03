@@ -133,11 +133,11 @@ auth_server_request(t_authresponse * authresponse, const char *request_type, con
     }
 	//检测返回的数据是否包含有"Auth:"
     if ((tmp = strstr(res, "Auth: "))) {
-		//读取返回的验证码...authcode.
+		//读取返回的认证结果码...authcode.
         if (sscanf(tmp, "Auth: %d", (int *)&authresponse->authcode) == 1) {
             debug(LOG_INFO, "Auth server returned authentication code %d", authresponse->authcode);
             free(res);
-			//返回验证码...
+			//返回认证结果码...
             return (authresponse->authcode);
         } else {
             debug(LOG_WARNING, "Auth server did not return expected authentication code");

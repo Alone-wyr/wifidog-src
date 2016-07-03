@@ -72,9 +72,14 @@ http_callback_404(httpd * webserver, request * r, int error_code)
      * http request to a standard port. At any rate, this handler is called only
      * if the internet/auth server is down so it's not a huge loss, but still.
      */
+     //还原客户所要访问的真实url，比如说请求一个url为:
+     //www.Alone-wyr.com/darling?var1=hello&var2=world
+     //host:www.Alone-wyr.com代表要访问的服务器地址.
+     //path:darling代表要获取的页面.
+     //query:var1=hello&var2=world附加的参数列表.
     snprintf(tmp_url, (sizeof(tmp_url) - 1), "http://%s%s%s%s",
              r->request.host, r->request.path, r->request.query[0] ? "?" : "", r->request.query);
-	//url为用户实际要浏览的地址...
+	//对url进行encode一下..返回真实要访问的地址到url中.
     url = httpdUrlEncode(tmp_url);
 
     if (!is_online()) {
@@ -109,7 +114,16 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         /* Re-direct them to auth server */
 		//well..这里一切都正常...设备和服务器都是在线的...这里需要重定向到认证服务器....
         char *urlFragment;
-
+		//设置url片段,比如可能如下:
+		/*	确定了请求的页面，确定了传递过去的参数!!!!
+			login/?
+			gw_address=xx&
+			gw_port=xx&
+			gw_id=xx&
+			ip=xx&
+			mac=xx&
+			url=xx		
+		*/
         if (!(mac = arp_get(r->clientAddr))) {
             /* We could not get their MAC address */
             debug(LOG_INFO, "Failed to retrieve MAC address for ip %s, so not putting in the login request",
@@ -126,12 +140,22 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         }
 
         // if host is not in whitelist, maybe not in conf or domain'IP changed, it will go to here.
+        
+        //那其实如果有设置白名单域名的话，在fw_init函数里面初始化防火墙的时候就会放行这部分的域名了的.
+        //但是为什么还需要在iptables规则里面检测到，这里还需要进行检测呢?
+        //注释说了，可能这个白名单域名不在conf文件里,(虽然"global"的规则集合是通过conf来确定的..只能说有
+        //那么可能吧...没有在conf但是却存在"global"规则结合.
+        //另外一种可能就是域名的ip地址已经改变了..这个才是真正的原因..因为一个域名中间替换掉了ip地址的话,
+        //那之前fw_init设置的规则的-d 对应的ip地址就是过时了的..现在重新设置，调用fw_allow_host..重新设置
+        //一个允许-d host的规则..
+        
         //检测该主机是否在白名单里面....
         debug(LOG_INFO, "Check host %s is in whitelist or not", r->request.host);       // e.g. www.example.com
         t_firewall_rule *rule;
         //e.g. example.com is in whitelist
         // if request http://www.example.com/, it's not equal example.com.
         for (rule = get_ruleset("global"); rule != NULL; rule = rule->next) {
+			//"global"的规则集合..可以确定白名单域名..确定放行的白名单.
             debug(LOG_INFO, "rule mask %s", rule->mask);
             if (strstr(r->request.host, rule->mask) == NULL) {
                 debug(LOG_INFO, "host %s is not in %s, continue", r->request.host, rule->mask);
@@ -146,6 +170,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                 strcat(prefix, ".");    // www.
                 strcat(prefix, rule->mask);     // www.example.com
                 if (strcasecmp(r->request.host, prefix) == 0) {
+					//允许子域名...
                     debug(LOG_INFO, "allow subdomain");
                     fw_allow_host(r->request.host);
                     http_send_redirect(r, tmp_url, "allow subdomain");
@@ -156,6 +181,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
             } else {
                 // e.g. "example.com" is in conf, so it had been parse to IP and added into "iptables allow" when wifidog start. but then its' A record(IP) changed, it will go to here.
                 debug(LOG_INFO, "allow domain again, because IP changed");
+				//允许域名...
                 fw_allow_host(r->request.host);
                 http_send_redirect(r, tmp_url, "allow domain");
                 free(url);
@@ -165,6 +191,9 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         }
 
         debug(LOG_INFO, "Captured %s requesting [%s] and re-directing them to login page", r->clientAddr, url);
+		//既然也不是白名单域名..(当然也不是白名单MAC咯..不然不会到这里来的)..
+		//到了这里来的，都是因为访问了80端口重定向到2060端口了...)
+		//上面也解释过了..为什么还需要在匹配一次白名单域名.就是因为以防host->ip的地址发生改变过了.
         http_send_redirect_to_auth(r, urlFragment, "Redirect to login page");
         free(urlFragment);
     }
@@ -229,7 +258,14 @@ http_send_redirect_to_auth(request * r, const char *urlFragment, const char *tex
                   protocol, auth_server->authserv_hostname, port, auth_server->authserv_path, urlFragment);
 	//url重定向到的地址...text表示为302错误的描述..
 //比如如下....
-//http://test.caimore.cc:80/authpuppy/login/?gw_address=192.168.9.1&gw_port=2060&gw_id=123&mac=60:f8:1d:ef:58:ad&url=http%3A//short.weixin.qq.com/mmtls/4ee8495f&d
+/*	http://test.caimore.cc:80/authpuppy/  (这个函数添加的).其他部分作为urlfragment存在。。
+	login/?
+	gw_address=192.168.9.1&
+	gw_port=2060&
+	gw_id=123&
+	mac=60:f8:1d:ef:58:ad&
+	url=http%3A//short.weixin.qq.com/mmtls/4ee8495f&d
+*/
     http_send_redirect(r, url, text);
     free(url);
 }
@@ -265,7 +301,8 @@ http_callback_auth(httpd * webserver, request * r)
     httpVar *token;
     char *mac;
     httpVar *logout = httpdGetVariableByName(r, "logout");
-
+	//能够执行到这里是调用过httpdReadRequest和httpdProcessRequest,
+	//这些函数会处理连接到2060端口服务器的url中的path，然后把token保存到了request结构体啦.
     if ((token = httpdGetVariableByName(r, "token"))) {
         /* They supplied variable "token" */
         if (!(mac = arp_get(r->clientAddr))) {
@@ -278,10 +315,10 @@ http_callback_auth(httpd * webserver, request * r)
 
             if ((client = client_list_find(r->clientAddr, mac)) == NULL) {
                 debug(LOG_DEBUG, "New client for %s", r->clientAddr);
-			//往client list添加一个客户..
+				//往client list添加一个客户..
                 client_list_add(r->clientAddr, mac, token->value);
             } else if (logout) {
-            		//是否是要注销..
+            	//是否是要注销..
                 logout_client(client);
             } else {
                 debug(LOG_DEBUG, "Client for %s is already in the client list", client->ip);
@@ -289,6 +326,7 @@ http_callback_auth(httpd * webserver, request * r)
 
             UNLOCK_CLIENT_LIST();
             if (!logout) { /* applies for case 1 and 3 from above if */
+				//在这里同认证服务器交互来认证client..
                 authenticate_client(r);
             }
             free(mac);

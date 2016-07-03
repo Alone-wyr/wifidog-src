@@ -105,7 +105,10 @@ logout_client(t_client * client)
     /* Advertise the logout if we have an auth server */
     if (config->auth_servers != NULL) {
         UNLOCK_CLIENT_LIST();
-		//告诉服务器..我们注销掉了一个客户..因为它超时了..
+		//告诉服务器..我们注销掉了一个客户..因为它超时了,或者是点击了断开按钮??(类似于在上学的
+		//时候，连接cmcc登录成功后跳转到页面有个disconnect按钮的页面,,退出的时候就点击它../
+		//当然不按disconnect，直接关闭wifi的话..也会在一断时间内断开..
+		//因此可以认为断开有2种方式，要么主动的点击disconnect，要么是超时了..(一定时间内没有数据的交互)
         auth_server_request(&authresponse, REQUEST_TYPE_LOGOUT,
                             client->ip, client->mac, client->token,
                             client->counters.incoming, client->counters.outgoing, client->counters.incoming_delta, client->counters.outgoing_delta);
@@ -134,7 +137,7 @@ authenticate_client(request * r)
     t_auth_serv *auth_server = NULL;
 
     LOCK_CLIENT_LIST();
-
+	//http_callback_auth函数里面会添加client到client list.
     client = client_dup(client_list_find_by_ip(r->clientAddr));
 
     UNLOCK_CLIENT_LIST();
@@ -199,6 +202,15 @@ authenticate_client(request * r)
         debug(LOG_ERR, "Got ERROR from central server authenticating token %s from %s at %s", client->token, client->ip,
               client->mac);
         send_http_page(r, "Error!", "Error: We did not get a valid answer from the central server");
+		/*
+		我擦..验证失败(ERROR/DENIED等)之后竟然不会把client从client list中给delete掉..
+		不过有个线程会定时查看client list中每个client的数据情况..发现它的流量一段时间内并
+		没有变化就会把它从client list掉..
+		可能的原因是假设，认证失败后，客户有可能马上会再次认证吧，作为一个cache的功能..
+		比如在登录页面输入的账号和密码错误..然后当然会在重新输入一次..此时在http_callback_auth
+		就会查找到client list已经有这个client结构体啦..
+		I suppose.
+		*/
         break;
 
     case AUTH_DENIED:
@@ -209,17 +221,25 @@ authenticate_client(request * r)
         fw_deny(client);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_DENIED);
+		/*
+		gw_message.php?message=denied作为url fragment发送到认证服务器上..
+		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message");
         free(urlFragment);
         break;
 
     case AUTH_VALIDATION:
         /* They just got validated for X minutes to check their email */
+		//仅仅是认证通过，可以允许访问几分钟而已...??
+		//mark FW_MARK_PROBATION，也就是试用期的意思...
         debug(LOG_INFO, "Got VALIDATION from central server authenticating token %s from %s at %s"
               "- adding to firewall and redirecting them to activate message", client->token, client->ip, client->mac);
         fw_allow(client, FW_MARK_PROBATION);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACTIVATE_ACCOUNT);
+		/*
+		gw_message.php?message=ativate作为url fragment发送到认证服务器上..
+		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message");
         free(urlFragment);
         break;
@@ -231,6 +251,9 @@ authenticate_client(request * r)
         fw_allow(client, FW_MARK_KNOWN);
         served_this_session++;
         safe_asprintf(&urlFragment, "%sgw_id=%s", auth_server->authserv_portal_script_path_fragment, config->gw_id);
+		/*
+		portal/?gw_id=xxx作为url fragment 发送到认证服务器.
+		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to portal");
         free(urlFragment);
         break;

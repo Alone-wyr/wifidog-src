@@ -64,6 +64,9 @@ thread_httpd(void *args)
 		 */
 		debug(LOG_DEBUG, "Processing request from %s", r->clientAddr);
 		debug(LOG_DEBUG, "Calling httpdProcessRequest() for %s", r->clientAddr);
+		//前面有通过函数httpdAddCContent设置访问页面的回调函数..如果请求的不是页面没有设置，
+		//那就会调用404错误...
+		//该函数httpdSetErrorFunction会设定404错误的回调函数.
 		httpdProcessRequest(webserver, r);
 		debug(LOG_DEBUG, "Returned from httpdProcessRequest() for %s", r->clientAddr);
 	}
