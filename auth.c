@@ -238,7 +238,7 @@ authenticate_client(request * r)
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACTIVATE_ACCOUNT);
 		/*
-		gw_message.php?message=ativate作为url fragment发送到认证服务器上..
+			gw_message.php?message=ativate作为url fragment发送到认证服务器上..
 		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message");
         free(urlFragment);
@@ -252,7 +252,7 @@ authenticate_client(request * r)
         served_this_session++;
         safe_asprintf(&urlFragment, "%sgw_id=%s", auth_server->authserv_portal_script_path_fragment, config->gw_id);
 		/*
-		portal/?gw_id=xxx作为url fragment 发送到认证服务器.
+			portal/?gw_id=xxx作为url fragment 发送到认证服务器.
 		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to portal");
         free(urlFragment);

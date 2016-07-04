@@ -119,6 +119,8 @@ ping(void)
         /*
          * No auth servers for me to talk to
          */
+         //连接不到认证服务器..但是前面的状态是可以的..
+         //现在需要设置为不可以咯...
         if (!authdown) {
             fw_set_authdown();
             authdown = 1;

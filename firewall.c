@@ -81,6 +81,12 @@ fw_allow(t_client * client, int new_fw_connection_state)
     result = iptables_fw_access(FW_ACCESS_ALLOW, client->ip, client->mac, new_fw_connection_state);
 
     /* Deny after if needed. */
+/*
+	比如有一种情况,,一个client从试用FW_MARK_PROBATION改变为了FW_ACCESS_ALLOW..
+	那其实在iptables规则是已经有接受FW_MARK_PROBATION的数据包了..会把client的数据包mark为FW_MARK_PROBATION..
+	现在改变为ALLOW,,需要设置mark为FW_ACCESS_ALLOW..因为要删掉旧的..
+	否则同时存在对同一个client设置mark有2条规则..而且改变后的是放在后面..这样就没有作用的。因此要删掉旧的。
+*/
     if (old_state != FW_MARK_NONE) {
         debug(LOG_DEBUG, "Clearing previous fw_connection_state %d", old_state);
         _fw_deny_raw(client->ip, client->mac, old_state);
@@ -357,6 +363,7 @@ fw_sync_with_authserver(void)
                              tmp->counters.incoming =
                              tmp->counters.outgoing = 0;
                         } else {
+                        //在试用期间的client转为了allow..没有清除掉之前存在的流量值的统计。
                             //We don't want to clear counters if the user was in validation, it probably already transmitted data..
                             debug(LOG_INFO,
                                   "%s - Skipped clearing counters after all, the user was previously in validation",
