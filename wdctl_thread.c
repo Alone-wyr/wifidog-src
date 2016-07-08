@@ -142,7 +142,7 @@ thread_wdctl(void *arg)
         len = sizeof(sa_un);
         memset(&sa_un, 0, len);
         fd = (int *)safe_malloc(sizeof(int));
-	//阻塞等待客户端的连接.....
+	//阻塞等待客户端的连接.....wdctl发送过来一些command 比如status , restart, reboot, stop..
         if ((*fd = accept(wdctl_socket_server, (struct sockaddr *)&sa_un, &len)) == -1) {
             debug(LOG_ERR, "Accept failed on control socket: %s", strerror(errno));
             free(fd);
@@ -288,10 +288,12 @@ wdctl_restart(int afd)
     debug(LOG_NOTICE, "Will restart myself");
 
     /* First, prepare the internal socket */
+	//准备内部的socket..这个socket是重新启动一个wifidog进程..同那个进程通信的socket.
     sock_name = conf->internal_sock;
     debug(LOG_DEBUG, "Socket name: %s", sock_name);
 
     debug(LOG_DEBUG, "Creating socket");
+	//这边创建内部服务器..并监听文件..等待另外一个wifidog启动后..连接过来.
     sock = create_unix_socket(sock_name);
     if (-1 == sock) {
         return;
@@ -306,7 +308,7 @@ wdctl_restart(int afd)
         /* Parent */
 
         /* Wait for the child to connect to our socket : */
-	//等待子进程连接到该socket.
+	//阻塞等待子进程连接到该socket.
         debug(LOG_DEBUG, "Waiting for child to connect on internal socket");
         len = sizeof(sa_un);
         if ((fd = accept(sock, (struct sockaddr *)&sa_un, &len)) == -1) {
@@ -339,7 +341,7 @@ wdctl_restart(int afd)
         close(fd);
 
         debug(LOG_INFO, "Sent all existing clients to child.  Committing suicide!");
-	//关闭接受"command"的这个socket...到这里接收到的socket就是"restart"咯..
+	//关闭accept 返回的 "接收command"的这个socket...到这里接收到的socket就是"restart"咯..
         shutdown(afd, 2);
         close(afd);
 
@@ -348,13 +350,25 @@ wdctl_restart(int afd)
         wdctl_stop(afd);
     } else {
         /* Child */
+		//关闭掉wifidog等待wdctl的连接的服务器(发送command的socket.)
         close(wdctl_socket_server);
+		//因为是fork的..继承了父进程的fd...这个sock是等待子进程连接到父进程发送client list的服务器..
+		//父进程也有close 这个socket.
         close(sock);
+		//关闭掉ping的socket...
         close_icmp_socket();
+		//关闭accept 返回的 "接收command"的这个socket...到这里接收到的socket就是"restart"咯..
         shutdown(afd, 2);
         close(afd);
         debug(LOG_NOTICE, "Re-executing myself (%s)", restartargv[0]);
+		
+		/*
+		如果parent和child运行在同一个session里,而且parent是session头。所以作为session头的parent如果exit结束执行的话,
+		那么会话session组中的所有进程将都被杀死。执行setsid()之后,parent将重新获得一个新的会话session组id,child将仍
+		持有原有的会话session组，这时parent退出之后,将不会影响到child了.
+		*/
         setsid();
+		
 	//在子进程中执行外部命令...这里是重启wifidog.
 	//跟随的参数是restartargv, 其实会有 -x pid...这里创建的进程..就会来连接到socket..读取clients..
 	//尤其重要的是-x pid这个参数....

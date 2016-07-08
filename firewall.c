@@ -267,7 +267,7 @@ fw_sync_with_authserver(void)
     t_authresponse authresponse;
     t_client *p1, *p2, *worklist, *tmp;
     s_config *config = config_get_config();
-
+		//这个函数主要就是更新每个客户端的一些统计值..比如下行和上传流量值等..
     if (-1 == iptables_fw_counters_update()) {
         debug(LOG_ERR, "Could not get counters from firewall!");
         return;
@@ -290,6 +290,7 @@ fw_sync_with_authserver(void)
          * However, if the firewall blocks it, it will not help.  The suggested
          * way to deal witht his is to keep the DHCP lease time extremely
          * short:  Shorter than config->checkinterval * config->clienttimeout */
+         //发送ping包给客户端.....
         icmp_ping(p1->ip);
         /* Update the counters on the remote server only if we have an auth server */
         if (config->auth_servers != NULL) {
@@ -304,6 +305,7 @@ fw_sync_with_authserver(void)
               config->checkinterval * config->clienttimeout, current_time);
         if (p1->counters.last_updated + (config->checkinterval * config->clienttimeout) <= current_time) {
             /* Timing out user */
+			//超过了设定的时间内处于inactive状态....
             debug(LOG_INFO, "%s - Inactive for more than %ld seconds, removing client and denying in firewall",
                   p1->ip, config->checkinterval * config->clienttimeout);
             LOCK_CLIENT_LIST();
@@ -318,6 +320,12 @@ fw_sync_with_authserver(void)
             }
             UNLOCK_CLIENT_LIST();
         } else {
+        /*
+        	对于连接着的用户，会定期的上报已使用的流量值给认证服务器..认证服务器也会返回一些一个auth_code..
+        	通过这个auth_code可以得到对这个用户发送流量值后的反馈..
+        	假设实际当中..对用户是有限制流量的..那就可以达到阈值后,通过connect state有Allow转换为deny..由此remove掉
+        	用户。
+        */
             /*
              * This handles any change in
              * the status this allows us

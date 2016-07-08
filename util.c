@@ -305,6 +305,8 @@ init_icmp_socket(void)
         (flags = fcntl(icmp_fd, F_GETFL, 0)) == -1 ||
         fcntl(icmp_fd, F_SETFL, flags | O_NONBLOCK) == -1 ||
         setsockopt(icmp_fd, SOL_SOCKET, SO_RCVBUF, &oneopt, sizeof(oneopt)) ||
+        	//ping包是发送给连接到路由器wifi的client..分配的当前是同一个网段的ip地址..
+        	//因为要ping到client 是不需要经过路由的..同一个网段内可以直接达到.
         setsockopt(icmp_fd, SOL_SOCKET, SO_DONTROUTE, &zeroopt, sizeof(zeroopt)) == -1) {
         debug(LOG_ERR, "Cannot create ICMP raw socket.");
         return 0;

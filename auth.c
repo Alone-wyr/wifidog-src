@@ -264,6 +264,9 @@ authenticate_client(request * r)
               "- redirecting them to failed_validation message", client->token, client->ip, client->mac);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACCOUNT_VALIDATION_FAILED);
+		/*
+			gw_message.php?message=failed_validation
+		*/
         http_send_redirect_to_auth(r, urlFragment, "Redirect to failed validation message");
         free(urlFragment);
         break;

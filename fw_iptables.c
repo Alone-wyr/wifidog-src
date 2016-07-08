@@ -553,19 +553,22 @@ iptables_fw_destroy_mention(const char *table, const char *chain, const char *me
     iptables_insert_gateway_id(&victim);
 
     debug(LOG_DEBUG, "Attempting to destroy all mention of %s from %s.%s", victim, table, chain);
-
+		//显示某个表内的某个链的规则...在第一列显示出行号.
     safe_asprintf(&command, "iptables -t %s -L %s -n --line-numbers -v", table, chain);
     iptables_insert_gateway_id(&command);
-
+	
+		//popen打开命令..返回的结果可以直接fgets读取咯...
     if ((p = popen(command, "r"))) {
         /* Skip first 2 lines */
         while (!feof(p) && fgetc(p) != '\n') ;
         while (!feof(p) && fgetc(p) != '\n') ;
         /* Loop over entries */
+	//循环所有的条目.
         while (fgets(line, sizeof(line), p)) {
-            /* Look for victim */
+            /* Look for victim 牺牲品..受害人...*/
             if (strstr(line, victim)) {
                 /* Found victim - Get the rule number into rulenum */
+				//%9[0-9]的意思是查找0-9..如果遇到不是0-9就返回..同时最多只能读取长度9
                 if (sscanf(line, "%9[0-9]", rulenum) == 1) {
                     /* Delete the rule: */
                     debug(LOG_DEBUG, "Deleting rule %s from %s.%s because it mentions %s", rulenum, table, chain,
@@ -668,6 +671,17 @@ iptables_fw_auth_reachable(void)
 }
 
 /** Update the counters of all the clients in the client list */
+/*
+iptables  -v -n -x -L 显示的结果如下格式:(比如POSTROUTING链来说...
+Chain POSTROUTING (policy ACCEPT 2569 packets, 2681K bytes)
+ pkts bytes target     prot opt in     out     source               destination
+ 5139 5373K L7POSTROUTING  all  --  *      *       0.0.0.0/0            0.0.0.0/0
+
+ 因此要获取一个规则的详细信息..首先要略过前2行...
+ %*s     %llu    %*s     %*s    %*s    %*s %*s %15[0-9.]       %*s             %*s %*s %*s %*s %*s
+ pkts    bytes  target    prot     opt   in     out    source     destination
+ ???
+ */
 int
 iptables_fw_counters_update(void)
 {
@@ -702,14 +716,16 @@ iptables_fw_counters_update(void)
             debug(LOG_DEBUG, "Read outgoing traffic for %s: Bytes=%llu", ip, counter);
             LOCK_CLIENT_LIST();
             if ((p1 = client_list_find_by_ip(ip))) {
-				//在checkinterval的期间..有流量的产生..因此才需要更新last_updated...
+				//在checkinterval的期间..有流量的产生..都会更新一些统计值..同时也有用last_updated来标记统计的时刻.
 				//我猜想..假设一个客户直接关闭wifi后..wifidog并不知道..就是通过查看checkinterval期间来查看是否有流量在传输..
 				//如果有流量传输更新last_updated,,代表这个时间点之前client还是在线的
 				//但是一旦没有流量产生..因此它的last_updated就不会更新啦.在该函数外面有个地方会检测updated + value的值..
-				//也就是value的时间内没有流量产生，那就注销该设备..(那可能是真的没产生流量..也有可能是client关闭了和wifi的连接吧).
+				//也就是value的时间内没有流量产生，那就注销该设备..(可能是client关闭了和wifi的连接吧).
+				//client不会一直没有流量产生的..wifidog会间隔性的去ping客户端..那应该会有回复..之间其实有小数据的来往.
                 if ((p1->counters.outgoing - p1->counters.outgoing_history) < counter) {
-					//距离上一次上报流量值增加的流量值咯..上一次上报的时候为x，这一次查看iptables
-					//发现一共使用了y的流量值..那它这期间就是访问了y - x 的流量值
+					//history只有在restart方式重启wifidog的时候有用..这时候history记录没有restart时候的流量值..
+					//而delta就是restart之后重新开始计算的流量值...outgoing是总的流量值..
+					//因此outgoing - history也就是此期间的流量值了吧...(我好奇..它不是就是delta吗?)
                     p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
 					//total..一共访问的流量值.
                     p1->counters.outgoing = p1->counters.outgoing_history + counter;
@@ -725,6 +741,7 @@ iptables_fw_counters_update(void)
                       "iptables_fw_counters_update(): Could not find %s in client list, this should not happen unless if the gateway crashed",
                       ip);
                 debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_OUTGOING);
+				//删掉iptables里面该ip地址的规则。
                 iptables_fw_destroy_mention("mangle", CHAIN_OUTGOING, ip);
                 debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_INCOMING);
                 iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);

@@ -213,6 +213,10 @@ get_clients_from_parent(void)
                         } else if (strcmp(key, "fd") == 0) {
                             client->fd = atoi(value);
                         } else if (strcmp(key, "counters_incoming") == 0) {
+                        	//有父进程发过来的一个client的总的下行数据量..
+                        	//当wifidog重新启动的时候,,这个值存放到history..(成为了过去的记录).
+                        	//incoming是要记录总的,不管restart重启wifidog..还有就是
+                        	//delta表示期间..在wifidog运行的期间的流量...
                             client->counters.incoming_history = (unsigned long long)atoll(value);
                             client->counters.incoming = client->counters.incoming_history;
                             client->counters.incoming_delta = 0;
@@ -538,7 +542,9 @@ gw_main(int argc, char **argv)
 
     /* Init the signals to catch chld/quit/etc */
     init_signals();
-
+	//启动wifidog 如果带了-x参数..那就会说明是restart的方式来启动wifidog的.
+	//orig -> original最初的意思..也就是父进程wifidog的pid号...
+	//当该参数不为0的时候..那就需要同父进程wifidog通信..然后接收client list(get_clients_from_parent)信息..
     if (restart_orig_pid) {
         /*
          * We were restarted and our parent is waiting for us to talk to it over the socket

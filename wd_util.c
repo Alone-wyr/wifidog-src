@@ -156,6 +156,9 @@ is_auth_online()
         /*
          * @return A string containing human-readable status text. MUST BE free()d by caller
          */
+/*
+由wdctl发过来的status命令..返回给它当前wifidog的状态...
+*/
 char *
 get_status_text()
 {
@@ -169,7 +172,9 @@ get_status_text()
     t_trusted_mac *p;
 
     pstr_cat(pstr, "WiFiDog status\n\n");
-
+	/*
+	wifidog上线的时间..记录已经在线的时间..
+	*/
     uptime = time(NULL) - started_time;
     days = (unsigned int)uptime / (24 * 60 * 60);
     uptime -= days * (24 * 60 * 60);
@@ -182,13 +187,17 @@ get_status_text()
     pstr_cat(pstr, "Version: " VERSION "\n");
     pstr_append_sprintf(pstr, "Uptime: %ud %uh %um %us\n", days, hours, minutes, seconds);
     pstr_cat(pstr, "Has been restarted: ");
-
+	/*
+	是否重新启动过...可以通过wdctl发送restart来重新启动wifidog.
+	*/
     if (restart_orig_pid) {
         pstr_append_sprintf(pstr, "yes (from PID %d)\n", restart_orig_pid);
     } else {
         pstr_cat(pstr, "no\n");
     }
-
+	/*
+	当前路由器是否在线...还有认证服务器是否在线.
+	*/
     pstr_append_sprintf(pstr, "Internet Connectivity: %s\n", (is_online()? "yes" : "no"));
     pstr_append_sprintf(pstr, "Auth server reachable: %s\n", (is_auth_online()? "yes" : "no"));
     pstr_append_sprintf(pstr, "Clients served this session: %lu\n\n", served_this_session);
@@ -204,6 +213,9 @@ get_status_text()
     pstr_append_sprintf(pstr, "%d clients " "connected.\n", count);
 
     count = 1;
+	/*
+	当前连接到路由器的所有客户端的信息....
+	*/
     while (current != NULL) {
         pstr_append_sprintf(pstr, "\nClient %d\n", count);
         pstr_append_sprintf(pstr, "  IP: %s MAC: %s\n", current->ip, current->mac);
@@ -217,7 +229,9 @@ get_status_text()
     client_list_destroy(sublist);
 
     config = config_get_config();
-
+	/*
+	信任MAC的白名单列表..
+	*/
     if (config->trustedmaclist != NULL) {
         pstr_cat(pstr, "\nTrusted MAC addresses:\n");
 
@@ -225,7 +239,9 @@ get_status_text()
             pstr_append_sprintf(pstr, "  %s\n", p->mac);
         }
     }
-
+	/*
+		当前认证服务器的name和ip
+	*/
     pstr_cat(pstr, "\nAuthentication servers:\n");
 
     LOCK_CONFIG();
